@@ -37,10 +37,10 @@ userRouter.post("signup", async (c) => {
 });
 
 userRouter.post("signin", async (c) => {
+  console.log("hllo");
   const prisma = new PrismaClient({
     datasourceUrl: c.env?.DATABASE_URL,
   }).$extends(withAccelerate());
-
   try {
     const body = await c.req.json();
     const validation = signinInput.safeParse(body);
@@ -57,6 +57,7 @@ userRouter.post("signin", async (c) => {
 
     if (!user) {
       c.status(403);
+      console.log("err0r", user);
       return c.json({ error: "user not found" });
     }
 
@@ -64,6 +65,7 @@ userRouter.post("signin", async (c) => {
     return c.json({ jwt });
   } catch (error) {
     c.status(403);
+    console.log("error", error);
     return c.json({ error: "sigin failed" });
   }
 });
