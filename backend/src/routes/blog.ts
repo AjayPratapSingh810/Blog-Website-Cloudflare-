@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { PrismaClient } from "@prisma/client/edge";
 import { withAccelerate } from "@prisma/extension-accelerate";
 import { sign, verify } from "hono/jwt";
+import { createPostInput, updatePostInput } from "ajay-first-common-app";
 export const blogRouter = new Hono<{
   Bindings: {
     DATABASE_URL: string;
@@ -19,53 +20,59 @@ blogRouter.use("/*", async (c, next) => {
   if (user) {
     c.set("userId", user.id);
     await next();
-    console.log("hllo");
   } else {
     c.status(403);
     return c.json({ message: "Not Authorized" });
   }
 });
 blogRouter.get("/bulk", async (c) => {
-  console.log("here 1");
+  try {
+    console.log("here 1");
+    const prisma = new PrismaClient({
+      datasourceUrl: c.env.DATABASE_URL,
+    }).$extends(withAccelerate());
+    const allBlogs = await prisma.post.findMany();
+    return c.json({
+      allBlogs,
+    });
+  } catch (error) {
+    c.status(403);
+    return c.json({ message: "Error while fetching all blogs" });
+  }
+});
+blogRouter.get("/:id", async (c) => {
   const prisma = new PrismaClient({
     datasourceUrl: c.env.DATABASE_URL,
   }).$extends(withAccelerate());
-  console.log("here");
-  const allBlogs = await prisma.post.findMany();
-  console.log("allBlogs", allBlogs);
-  return c.json({
-    allBlogs,
-  });
+  const blogId = await c.req.param("id");
+  try {
+    const blogs = await prisma.post.findMany({
+      where: {
+        id: blogId,
+      },
+    });
+    return c.json({
+      blogs,
+    });
+  } catch (error) {
+    c.status(411);
+    return c.json({
+      message: "Error while fetching all blogs of user",
+    });
+  }
 });
-// blogRouter.get(":id", async (c) => {
-//   const prisma = new PrismaClient({
-//     datasourceUrl: c.env.DATABASE_URL,
-//   }).$extends(withAccelerate());
-//   const authorId = await c.req.param("id");
-//   try {
-//     const blogs = await prisma.post.findMany({
-//       where: {
-//         authorId,
-//       },
-//     });
-//     return c.json({
-//       blogs,
-//     });
-//   } catch (error) {
-//     c.status(411);
-//     return c.json({
-//       message: "Error while fetching all blogs of user",
-//     });
-//   }
-// });
 
 blogRouter.post("/", async (c) => {
   const prisma = new PrismaClient({
     datasourceUrl: c.env.DATABASE_URL,
   }).$extends(withAccelerate());
   const body = await c.req.json();
+  const validation = createPostInput.safeParse(body);
+  if (!validation.success) {
+    c.status(403);
+    return c.json({ error: "Blog post validation failed" });
+  }
   const userId = c.get("userId");
-  console.log("user id ", userId);
   try {
     const blog = await prisma.post.create({
       data: {
@@ -74,12 +81,14 @@ blogRouter.post("/", async (c) => {
         authorId: userId,
       },
     });
-    console.log("blog", blog);
     return c.json({
       id: blog.id,
     });
   } catch (error) {
-    console.log("error", error);
+    c.status(411);
+    return c.json({
+      message: "Error while post blog of user",
+    });
   }
 });
 
@@ -88,28 +97,19 @@ blogRouter.put("/", async (c) => {
     datasourceUrl: c.env.DATABASE_URL,
   }).$extends(withAccelerate());
   const body = await c.req.json();
-  const blog = await prisma.post.update({
-    where: {
-      id: body.id,
-    },
-    data: {
-      title: body.title,
-      content: body.content,
-    },
-  });
-  return c.json({
-    blog,
-  });
-});
-blogRouter.get("/", async (c) => {
-  const prisma = new PrismaClient({
-    datasourceUrl: c.env.DATABASE_URL,
-  }).$extends(withAccelerate());
-  const body = await c.req.json();
+  // const validation = updatePostInput.safeParse(body);
+  // if (!validation.success) {
+  //   c.status(403);
+  //   return c.json({ error: "Update blog post validation failed" });
+  // }
   try {
-    const blog = await prisma.post.findFirst({
+    const blog = await prisma.post.update({
       where: {
         id: body.id,
+      },
+      data: {
+        title: body.title,
+        content: body.content,
       },
     });
     return c.json({
@@ -118,7 +118,7 @@ blogRouter.get("/", async (c) => {
   } catch (error) {
     c.status(411);
     return c.json({
-      message: "Error while fetching blog post",
+      message: "Error while updating blog of user",
     });
   }
 });
